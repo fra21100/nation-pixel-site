@@ -106,7 +106,33 @@
         <button onclick="confirmPurchase()">Conferma Acquisto</button>
     </div>
 
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-storage-compat.js"></script>
+
     <script>
+        // Configurazione Firebase (sostituisci con i tuoi dati)
+        const firebaseConfig = {
+            apiKey: "AIzaSyAb4XR1vHS-3qr0nJW7kWzYzd4qZS-T-PY",
+            authDomain: "million-dollar-page-2.firebaseapp.com",
+            projectId: "million-dollar-page-2",
+            storageBucket: "million-dollar-page-2.firebasestorage.app",
+            messagingSenderId: "277334756819",
+            appId: "1:277334756819:web:9da68b24baeb138cdaf326"
+        };
+
+        // Inizializza Firebase
+        try {
+            firebase.initializeApp(firebaseConfig);
+            console.log("Firebase inizializzato con successo");
+        } catch (error) {
+            console.error("Errore durante l'inizializzazione di Firebase:", error);
+        }
+
+        const db = firebase.firestore();
+        const storage = firebase.storage();
+
         const grid = document.getElementById('grid');
         const selection = document.getElementById('selection');
         const buyForm = document.getElementById('buy-form');
@@ -120,37 +146,7 @@
         const BLOCK_SIZE = 10; // Dimensione minima del blocco (10x10 pixel)
         const PRICE_PER_PIXEL = 1; // 1 pixel = 1 dollaro
         const TOTAL_PIXELS = 1000000; // 1000x1000 pixel
-        let purchasedBlocks = JSON.parse(localStorage.getItem('purchasedBlocks')) || [];
-
-        // Funzione per comprimere l'immagine
-        function compressImage(src, callback) {
-            const img = new Image();
-            img.src = src;
-            img.onload = function() {
-                const canvas = document.createElement('canvas');
-                const ctx = canvas.getContext('2d');
-                const maxSize = 200; // Ridimensiona a 200x200 max
-                let width = img.width;
-                let height = img.height;
-
-                if (width > height) {
-                    if (width > maxSize) {
-                        height = Math.round((height * maxSize) / width);
-                        width = maxSize;
-                    }
-                } else {
-                    if (height > maxSize) {
-                        width = Math.round((width * maxSize) / height);
-                        height = maxSize;
-                    }
-                }
-
-                canvas.width = width;
-                canvas.height = height;
-                ctx.drawImage(img, 0, 0, width, height);
-                callback(canvas.toDataURL('image/jpeg', 0.6)); // Qualità 60%
-            };
-        }
+        let purchasedBlocks = [];
 
         // Calcola i pixel occupati e aggiorna il contatore
         function updatePixelCounter() {
@@ -161,32 +157,43 @@
             pixelsRemainingSpan.textContent = remainingPixels.toLocaleString();
         }
 
-        // Carica i blocchi acquistati
-        function loadPurchasedBlocks() {
-            purchasedBlocks.forEach(block => {
-                const div = document.createElement('div');
-                div.className = 'pixel-block';
-                div.style.left = `${block.x}px`;
-                div.style.top = `${block.y}px`;
-                div.style.width = `${block.width}px`;
-                div.style.height = `${block.height}px`;
+        // Carica i blocchi acquistati da Firestore
+        async function loadPurchasedBlocks() {
+            try {
+                const snapshot = await db.collection('blocks').get();
+                console.log("Caricamento blocchi da Firestore:", snapshot.size, "blocchi trovati");
+                purchasedBlocks = [];
+                snapshot.forEach(doc => {
+                    const block = doc.data();
+                    block.id = doc.id;
+                    purchasedBlocks.push(block);
 
-                const img = document.createElement('img');
-                img.src = block.image;
-                img.alt = 'Logo';
-                if (block.link) {
-                    const a = document.createElement('a');
-                    a.href = block.link;
-                    a.target = '_blank';
-                    a.appendChild(img);
-                    div.appendChild(a);
-                } else {
-                    div.appendChild(img);
-                }
+                    const div = document.createElement('div');
+                    div.className = 'pixel-block';
+                    div.style.left = `${block.x}px`;
+                    div.style.top = `${block.y}px`;
+                    div.style.width = `${block.width}px`;
+                    div.style.height = `${block.height}px`;
 
-                grid.appendChild(div);
-            });
-            updatePixelCounter();
+                    const img = document.createElement('img');
+                    img.src = block.imageUrl;
+                    img.alt = 'Logo';
+                    if (block.link) {
+                        const a = document.createElement('a');
+                        a.href = block.link;
+                        a.target = '_blank';
+                        a.appendChild(img);
+                        div.appendChild(a);
+                    } else {
+                        div.appendChild(img);
+                    }
+
+                    grid.appendChild(div);
+                });
+                updatePixelCounter();
+            } catch (error) {
+                console.error("Errore durante il caricamento dei blocchi da Firestore:", error);
+            }
         }
 
         // Controlla se un’area è già occupata
@@ -213,7 +220,6 @@
             selection.style.width = '0px';
             selection.style.height = '0px';
             selection.style.display = 'block';
-            console.log(`Inizio selezione: (${startX}, ${startY})`);
         });
 
         grid.addEventListener('mousemove', (e) => {
@@ -231,7 +237,6 @@
             selection.style.top = `${minY}px`;
             selection.style.width = `${width}px`;
             selection.style.height = `${height}px`;
-            console.log(`Selezione in corso: (${minX}, ${minY}) - ${width}x${height}`);
         });
 
         grid.addEventListener('mouseup', () => {
@@ -242,8 +247,6 @@
             const height = Math.abs(endY - startY);
             const minX = Math.min(startX, endX);
             const minY = Math.min(startY, endY);
-
-            console.log(`Fine selezione: (${minX}, ${minY}) - ${width}x${height}`);
 
             // Controlla se l’area è valida
             if (width < BLOCK_SIZE || height < BLOCK_SIZE) {
@@ -260,7 +263,7 @@
             }
 
             // Calcola il costo
-            const pixels = (width / BLOCK_SIZE) * (height / BLOCK_SIZE) * 100; // Ogni blocco 10x10 = 100 pixel
+            const pixels = (width / BLOCK_SIZE) * (height / BLOCK_SIZE) * 100;
             const cost = pixels * PRICE_PER_PIXEL;
 
             // Mostra il form di acquisto
@@ -289,7 +292,7 @@
         });
 
         // Conferma dell’acquisto
-        function confirmPurchase() {
+        async function confirmPurchase() {
             const x = parseInt(buyForm.dataset.x);
             const y = parseInt(buyForm.dataset.y);
             const width = parseInt(buyForm.dataset.width);
@@ -302,59 +305,62 @@
                 return;
             }
 
-            const reader = new FileReader();
-            reader.onload = function(e) {
-                compressImage(e.target.result, function(compressedSrc) {
-                    const block = {
-                        x: x,
-                        y: y,
-                        width: width,
-                        height: height,
-                        image: compressedSrc,
-                        link: link
-                    };
+            try {
+                // Carica l’immagine su Firebase Storage
+                const storageRef = storage.ref(`images/${Date.now()}_${file.name}`);
+                console.log("Caricamento immagine su Storage:", file.name);
+                const snapshot = await storageRef.put(file);
+                const imageUrl = await snapshot.ref.getDownloadURL();
+                console.log("Immagine caricata con successo, URL:", imageUrl);
 
-                    try {
-                        purchasedBlocks.push(block);
-                        localStorage.setItem('purchasedBlocks', JSON.stringify(purchasedBlocks));
-                    } catch (e) {
-                        if (e.name === 'QuotaExceededError') {
-                            alert('Spazio in localStorage esaurito! Prova a rimuovere alcuni blocchi o a usare immagini più piccole.');
-                            return;
-                        }
-                    }
+                // Salva il blocco su Firestore
+                const block = {
+                    x: x,
+                    y: y,
+                    width: width,
+                    height: height,
+                    imageUrl: imageUrl,
+                    link: link
+                };
 
-                    const div = document.createElement('div');
-                    div.className = 'pixel-block';
-                    div.style.left = `${x}px`;
-                    div.style.top = `${y}px`;
-                    div.style.width = `${width}px`;
-                    div.style.height = `${height}px`;
+                console.log("Salvataggio blocco su Firestore:", block);
+                const docRef = await db.collection('blocks').add(block);
+                block.id = docRef.id;
+                purchasedBlocks.push(block);
+                console.log("Blocco salvato con successo, ID:", docRef.id);
 
-                    const img = document.createElement('img');
-                    img.src = block.image;
-                    img.alt = 'Logo';
-                    if (block.link) {
-                        const a = document.createElement('a');
-                        a.href = block.link;
-                        a.target = '_blank';
-                        a.appendChild(img);
-                        div.appendChild(a);
-                    } else {
-                        div.appendChild(img);
-                    }
+                const div = document.createElement('div');
+                div.className = 'pixel-block';
+                div.style.left = `${x}px`;
+                div.style.top = `${y}px`;
+                div.style.width = `${width}px`;
+                div.style.height = `${height}px`;
 
-                    grid.appendChild(div);
+                const img = document.createElement('img');
+                img.src = block.imageUrl;
+                img.alt = 'Logo';
+                if (block.link) {
+                    const a = document.createElement('a');
+                    a.href = block.link;
+                    a.target = '_blank';
+                    a.appendChild(img);
+                    div.appendChild(a);
+                } else {
+                    div.appendChild(img);
+                }
 
-                    buyForm.style.display = 'none';
-                    selection.style.display = 'none';
-                    linkInput.value = '';
-                    imageInput.value = '';
-                    previewImg.style.display = 'none';
-                    updatePixelCounter();
-                });
-            };
-            reader.readAsDataURL(file);
+                grid.appendChild(div);
+
+                buyForm.style.display = 'none';
+                selection.style.display = 'none';
+                linkInput.value = '';
+                imageInput.value = '';
+                previewImg.style.display = 'none';
+                updatePixelCounter();
+            } catch (error) {
+                console.error("Errore durante l'acquisto:", error);
+                alert("Si è verificato un errore durante l'acquisto: " + error.message);
+            }
         }
 
         // Carica i blocchi all’avvio
