@@ -7,28 +7,41 @@
             font-family: Arial, sans-serif;
             text-align: center;
             background-color: #f0f0f0;
+            margin: 0;
+            padding: 20px;
         }
         h1 {
             color: #333;
             margin-top: 20px;
+            font-size: 36px;
         }
         p {
             font-size: 18px;
             color: #555;
         }
+        #stats {
+            font-size: 16px;
+            color: #777;
+            margin: 10px 0;
+        }
         #grid {
             width: 1000px;
             height: 1000px;
-            border: 1px solid #ccc;
+            border: 2px solid #ccc;
             position: relative;
             margin: 20px auto;
             background-color: #fff;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
             cursor: crosshair;
         }
         .pixel-block {
             position: absolute;
             border: 1px solid #ddd;
             box-sizing: border-box;
+            transition: transform 0.2s;
+        }
+        .pixel-block:hover {
+            transform: scale(1.05);
         }
         .pixel-block img {
             width: 100%;
@@ -46,20 +59,40 @@
             padding: 20px;
             background-color: #fff;
             border: 1px solid #ccc;
-            width: 300px;
+            width: 350px;
             display: none;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+            border-radius: 5px;
         }
         #buy-form input, #buy-form button {
             margin: 10px 0;
-            padding: 5px;
+            padding: 8px;
             width: 100%;
             box-sizing: border-box;
+            font-size: 14px;
+        }
+        #buy-form button {
+            background-color: #ff7800;
+            color: #fff;
+            border: none;
+            cursor: pointer;
+            border-radius: 3px;
+        }
+        #buy-form button:hover {
+            background-color: #e66b00;
+        }
+        #preview {
+            max-width: 100px;
+            max-height: 100px;
+            margin: 10px auto;
+            display: none;
         }
     </style>
 </head>
 <body>
     <h1>The Million Dollar Page 2</h1>
     <p>Riscrivi la storia: se non hai fatto in tempo la prima volta, adesso hai una possibilità. Lascia il segno.</p>
+    <div id="stats">Pixel disponibili: <span id="pixels-remaining">1,000,000</span></div>
     <div id="grid">
         <div id="selection"></div>
     </div>
@@ -69,6 +102,7 @@
         <p>Costo: $<span id="cost"></span></p>
         <input type="text" id="link" placeholder="Inserisci il link del tuo sito (es. https://tuosito.com)">
         <input type="file" id="image" accept="image/*">
+        <img id="preview" src="" alt="Anteprima">
         <button onclick="confirmPurchase()">Conferma Acquisto</button>
     </div>
 
@@ -80,10 +114,52 @@
         const costSpan = document.getElementById('cost');
         const linkInput = document.getElementById('link');
         const imageInput = document.getElementById('image');
+        const previewImg = document.getElementById('preview');
+        const pixelsRemainingSpan = document.getElementById('pixels-remaining');
 
         const BLOCK_SIZE = 10; // Dimensione minima del blocco (10x10 pixel)
         const PRICE_PER_PIXEL = 1; // 1 pixel = 1 dollaro
+        const TOTAL_PIXELS = 1000000; // 1000x1000 pixel
         let purchasedBlocks = JSON.parse(localStorage.getItem('purchasedBlocks')) || [];
+
+        // Funzione per comprimere l'immagine
+        function compressImage(src, callback) {
+            const img = new Image();
+            img.src = src;
+            img.onload = function() {
+                const canvas = document.createElement('canvas');
+                const ctx = canvas.getContext('2d');
+                const maxSize = 200; // Ridimensiona a 200x200 max
+                let width = img.width;
+                let height = img.height;
+
+                if (width > height) {
+                    if (width > maxSize) {
+                        height = Math.round((height * maxSize) / width);
+                        width = maxSize;
+                    }
+                } else {
+                    if (height > maxSize) {
+                        width = Math.round((width * maxSize) / height);
+                        height = maxSize;
+                    }
+                }
+
+                canvas.width = width;
+                canvas.height = height;
+                ctx.drawImage(img, 0, 0, width, height);
+                callback(canvas.toDataURL('image/jpeg', 0.6)); // Qualità 60%
+            };
+        }
+
+        // Calcola i pixel occupati e aggiorna il contatore
+        function updatePixelCounter() {
+            const occupiedPixels = purchasedBlocks.reduce((total, block) => {
+                return total + (block.width * block.height);
+            }, 0);
+            const remainingPixels = TOTAL_PIXELS - occupiedPixels;
+            pixelsRemainingSpan.textContent = remainingPixels.toLocaleString();
+        }
 
         // Carica i blocchi acquistati
         function loadPurchasedBlocks() {
@@ -110,6 +186,7 @@
 
                 grid.appendChild(div);
             });
+            updatePixelCounter();
         }
 
         // Controlla se un’area è già occupata
@@ -125,20 +202,22 @@
         }
 
         // Gestione della selezione
-        let startX, startY, endX, endY;
+        let startX, startY, endX, endY, isSelecting = false;
         grid.addEventListener('mousedown', (e) => {
             const rect = grid.getBoundingClientRect();
             startX = Math.floor((e.clientX - rect.left) / BLOCK_SIZE) * BLOCK_SIZE;
             startY = Math.floor((e.clientY - rect.top) / BLOCK_SIZE) * BLOCK_SIZE;
+            isSelecting = true;
             selection.style.left = `${startX}px`;
             selection.style.top = `${startY}px`;
             selection.style.width = '0px';
             selection.style.height = '0px';
             selection.style.display = 'block';
+            console.log(`Inizio selezione: (${startX}, ${startY})`);
         });
 
         grid.addEventListener('mousemove', (e) => {
-            if (startX === undefined || startY === undefined) return;
+            if (!isSelecting) return;
             const rect = grid.getBoundingClientRect();
             endX = Math.floor((e.clientX - rect.left) / BLOCK_SIZE) * BLOCK_SIZE;
             endY = Math.floor((e.clientY - rect.top) / BLOCK_SIZE) * BLOCK_SIZE;
@@ -152,33 +231,39 @@
             selection.style.top = `${minY}px`;
             selection.style.width = `${width}px`;
             selection.style.height = `${height}px`;
+            console.log(`Selezione in corso: (${minX}, ${minY}) - ${width}x${height}`);
         });
 
         grid.addEventListener('mouseup', () => {
-            if (startX === undefined || startY === undefined) return;
+            if (!isSelecting) return;
+            isSelecting = false;
 
             const width = Math.abs(endX - startX);
             const height = Math.abs(endY - startY);
             const minX = Math.min(startX, endX);
             const minY = Math.min(startY, endY);
 
+            console.log(`Fine selezione: (${minX}, ${minY}) - ${width}x${height}`);
+
+            // Controlla se l’area è valida
             if (width < BLOCK_SIZE || height < BLOCK_SIZE) {
                 alert('Seleziona un’area di almeno 10x10 pixel!');
                 selection.style.display = 'none';
-                startX = startY = undefined;
                 return;
             }
 
+            // Controlla se l’area è occupata
             if (isAreaOccupied(minX, minY, width, height)) {
                 alert('Quest’area è già occupata! Scegli un’altra posizione.');
                 selection.style.display = 'none';
-                startX = startY = undefined;
                 return;
             }
 
-            const pixels = (width / BLOCK_SIZE) * (height / BLOCK_SIZE) * 100;
+            // Calcola il costo
+            const pixels = (width / BLOCK_SIZE) * (height / BLOCK_SIZE) * 100; // Ogni blocco 10x10 = 100 pixel
             const cost = pixels * PRICE_PER_PIXEL;
 
+            // Mostra il form di acquisto
             positionSpan.textContent = `(${minX}, ${minY}) - ${width}x${height} pixel`;
             costSpan.textContent = cost;
             buyForm.style.display = 'block';
@@ -186,8 +271,21 @@
             buyForm.dataset.y = minY;
             buyForm.dataset.width = width;
             buyForm.dataset.height = height;
+        });
 
-            startX = startY = undefined;
+        // Mostra l’anteprima dell’immagine
+        imageInput.addEventListener('change', () => {
+            const file = imageInput.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    previewImg.src = e.target.result;
+                    previewImg.style.display = 'block';
+                };
+                reader.readAsDataURL(file);
+            } else {
+                previewImg.style.display = 'none';
+            }
         });
 
         // Conferma dell’acquisto
@@ -206,44 +304,55 @@
 
             const reader = new FileReader();
             reader.onload = function(e) {
-                const block = {
-                    x: x,
-                    y: y,
-                    width: width,
-                    height: height,
-                    image: e.target.result,
-                    link: link
-                };
+                compressImage(e.target.result, function(compressedSrc) {
+                    const block = {
+                        x: x,
+                        y: y,
+                        width: width,
+                        height: height,
+                        image: compressedSrc,
+                        link: link
+                    };
 
-                purchasedBlocks.push(block);
-                localStorage.setItem('purchasedBlocks', JSON.stringify(purchasedBlocks));
+                    try {
+                        purchasedBlocks.push(block);
+                        localStorage.setItem('purchasedBlocks', JSON.stringify(purchasedBlocks));
+                    } catch (e) {
+                        if (e.name === 'QuotaExceededError') {
+                            alert('Spazio in localStorage esaurito! Prova a rimuovere alcuni blocchi o a usare immagini più piccole.');
+                            return;
+                        }
+                    }
 
-                const div = document.createElement('div');
-                div.className = 'pixel-block';
-                div.style.left = `${x}px`;
-                div.style.top = `${y}px`;
-                div.style.width = `${width}px`;
-                div.style.height = `${height}px`;
+                    const div = document.createElement('div');
+                    div.className = 'pixel-block';
+                    div.style.left = `${x}px`;
+                    div.style.top = `${y}px`;
+                    div.style.width = `${width}px`;
+                    div.style.height = `${height}px`;
 
-                const img = document.createElement('img');
-                img.src = block.image;
-                img.alt = 'Logo';
-                if (block.link) {
-                    const a = document.createElement('a');
-                    a.href = block.link;
-                    a.target = '_blank';
-                    a.appendChild(img);
-                    div.appendChild(a);
-                } else {
-                    div.appendChild(img);
-                }
+                    const img = document.createElement('img');
+                    img.src = block.image;
+                    img.alt = 'Logo';
+                    if (block.link) {
+                        const a = document.createElement('a');
+                        a.href = block.link;
+                        a.target = '_blank';
+                        a.appendChild(img);
+                        div.appendChild(a);
+                    } else {
+                        div.appendChild(img);
+                    }
 
-                grid.appendChild(div);
+                    grid.appendChild(div);
 
-                buyForm.style.display = 'none';
-                selection.style.display = 'none';
-                linkInput.value = '';
-                imageInput.value = '';
+                    buyForm.style.display = 'none';
+                    selection.style.display = 'none';
+                    linkInput.value = '';
+                    imageInput.value = '';
+                    previewImg.style.display = 'none';
+                    updatePixelCounter();
+                });
             };
             reader.readAsDataURL(file);
         }
