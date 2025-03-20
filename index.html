@@ -7,6 +7,9 @@
         body { font-family: Arial, sans-serif; text-align: center; }
         h1 { color: #333; }
         #map { width: 80%; height: 600px; margin: 20px auto; border: 1px solid #ccc; }
+        .leaflet-popup-content { text-align: center; }
+        button { padding: 5px 10px; margin-top: 10px; cursor: pointer; }
+        .logo-preview { max-width: 100px; max-height: 100px; margin-top: 10px; }
     </style>
 </head>
 <body>
@@ -15,6 +18,7 @@
     <div id="map"></div>
 
     <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+    <script src="nations.js"></script>
     <script>
         var map = L.map('map').setView([0, 0], 2);
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -25,7 +29,15 @@
             return Math.ceil(area / 100); // 1 pixel = 100 km²
         }
 
-        fetch('custom.geo.json') // Nome corretto del file
+        // Oggetto per tenere traccia delle nazioni acquistate (salvato in localStorage)
+        let purchasedNations = JSON.parse(localStorage.getItem('purchasedNations')) || {};
+
+        // Funzione per salvare lo stato delle nazioni
+        function savePurchasedNations() {
+            localStorage.setItem('purchasedNations', JSON.stringify(purchasedNations));
+        }
+
+        fetch('custom.geo.json')
             .then(response => {
                 if (!response.ok) throw new Error('Errore nel caricamento del JSON');
                 return response.json();
@@ -33,19 +45,75 @@
             .then(data => {
                 L.geoJSON(data, {
                     style: function(feature) {
-                        return { color: "#ff7800", weight: 1, fillOpacity: 0.5 };
+                        var name = feature.properties.name;
+                        return {
+                            color: "#ff7800",
+                            weight: 1,
+                            fillOpacity: purchasedNations[name] ? 0.8 : 0.5, // Più opaco se acquistata
+                            fillColor: purchasedNations[name] ? "#00ff00" : "#ff7800" // Verde se acquistata
+                        };
                     },
                     onEachFeature: function(feature, layer) {
-                        var name = feature.properties.NAME || feature.properties.name || "Nazione sconosciuta"; // Prova entrambe le varianti
-                        var area = feature.properties.area || 1000; // Default se area non presente
+                        var name = feature.properties.name || "Nazione sconosciuta";
+                        var area = nationData[name] || 1000;
                         var pixels = calculatePixels(area);
-                        layer.bindPopup(
-                            `<b>${name}</b><br>Pixel: ${pixels}<br>Costo: $${pixels}<br>Stato: Disponibile`
-                        );
+                        var isPurchased = purchasedNations[name] || false;
+
+                        // Contenuto del popup
+                        var popupContent = `
+                            <b>${name}</b><br>
+                            Pixel: ${pixels}<br>
+                            Costo: $${pixels}<br>
+                            Stato: ${isPurchased ? 'Acquistata' : 'Disponibile'}
+                        `;
+                        if (!isPurchased) {
+                            popupContent += `
+                                <br><button onclick="buyNation('${name}', ${pixels})">Compra</button>
+                            `;
+                        } else if (isPurchased.logo) {
+                            popupContent += `
+                                <br><img src="${isPurchased.logo}" class="logo-preview" alt="Logo">
+                                <br><button onclick="changeLogo('${name}')">Cambia Logo</button>
+                            `;
+                        }
+
+                        layer.bindPopup(popupContent);
                     }
                 }).addTo(map);
             })
             .catch(error => console.error('Errore:', error));
+
+        // Funzione per "comprare" una nazione
+        function buyNation(name, pixels) {
+            if (confirm(`Vuoi comprare ${name} per $${pixels}?`)) {
+                purchasedNations[name] = { purchased: true, logo: null };
+                savePurchasedNations();
+                alert('Nazione acquistata! Ora puoi caricare un logo.');
+                changeLogo(name);
+                location.reload(); // Ricarica la pagina per aggiornare la mappa
+            }
+        }
+
+        // Funzione per caricare o cambiare il logo
+        function changeLogo(name) {
+            var input = document.createElement('input');
+            input.type = 'file';
+            input.accept = 'image/*';
+            input.onchange = function(event) {
+                var file = event.target.files[0];
+                if (file) {
+                    var reader = new FileReader();
+                    reader.onload = function(e) {
+                        purchasedNations[name].logo = e.target.result; // Salva l'immagine come base64
+                        savePurchasedNations();
+                        alert('Logo caricato con successo!');
+                        location.reload();
+                    };
+                    reader.readAsDataURL(file);
+                }
+            };
+            input.click();
+        }
     </script>
 </body>
 </html>
