@@ -31,10 +31,47 @@
 
         // Oggetto per tenere traccia delle nazioni acquistate
         let purchasedNations = JSON.parse(localStorage.getItem('purchasedNations')) || {};
+        let logoLayers = {}; // Per tenere traccia degli overlay SVG
 
         // Funzione per salvare lo stato delle nazioni
         function savePurchasedNations() {
-            localStorage.setItem('purchasedNations', JSON.stringify(purchasedNations));
+            try {
+                localStorage.setItem('purchasedNations', JSON.stringify(purchasedNations));
+            } catch (e) {
+                if (e.name === 'QuotaExceededError') {
+                    alert('Spazio in localStorage esaurito! Prova a rimuovere alcune nazioni o a usare immagini più piccole.');
+                }
+            }
+        }
+
+        // Funzione per comprimere l'immagine
+        function compressImage(src, callback) {
+            const img = new Image();
+            img.src = src;
+            img.onload = function() {
+                const canvas = document.createElement('canvas');
+                const ctx = canvas.getContext('2d');
+                const maxSize = 300; // Ridimensiona a 300x300 max
+                let width = img.width;
+                let height = img.height;
+
+                if (width > height) {
+                    if (width > maxSize) {
+                        height = Math.round((height * maxSize) / width);
+                        width = maxSize;
+                    }
+                } else {
+                    if (height > maxSize) {
+                        width = Math.round((width * maxSize) / height);
+                        height = maxSize;
+                    }
+                }
+
+                canvas.width = width;
+                canvas.height = height;
+                ctx.drawImage(img, 0, 0, width, height);
+                callback(canvas.toDataURL('image/jpeg', 0.7)); // Qualità 70%
+            };
         }
 
         // Funzione per convertire GeoJSON in SVG path
@@ -66,13 +103,48 @@
             return pathData;
         }
 
+        // Funzione per creare o aggiornare l'overlay SVG
+        function updateLogoOverlay(name, geometry, logoSrc) {
+            if (logoLayers[name]) {
+                map.removeLayer(logoLayers[name]);
+            }
+
+            const bounds = L.geoJSON(geometry).getBounds();
+            const svgElement = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+            svgElement.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+            svgElement.setAttribute('viewBox', '0 0 1000 1000');
+
+            const pattern = document.createElementNS('http://www.w3.org/2000/svg', 'pattern');
+            pattern.setAttribute('id', `pattern-${name}`);
+            pattern.setAttribute('width', '100%');
+            pattern.setAttribute('height', '100%');
+            pattern.setAttribute('patternUnits', 'objectBoundingBox');
+            pattern.setAttribute('patternTransform', 'scale(0.5) translate(0.25, 0.25)'); // Centra e ridimensiona
+
+            const image = document.createElementNS('http://www.w3.org/2000/svg', 'image');
+            image.setAttribute('href', logoSrc);
+            image.setAttribute('width', '1000');
+            image.setAttribute('height', '1000');
+            pattern.appendChild(image);
+
+            const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+            path.setAttribute('d', geojsonToPath(geometry));
+            path.setAttribute('fill', `url(#pattern-${name})`);
+            path.setAttribute('stroke', '#ff7800');
+            path.setAttribute('stroke-width', '1');
+
+            svgElement.appendChild(pattern);
+            svgElement.appendChild(path);
+
+            logoLayers[name] = L.svgOverlay(svgElement, bounds).addTo(map);
+        }
+
         fetch('custom.geo.json')
             .then(response => {
                 if (!response.ok) throw new Error('Errore nel caricamento del JSON');
                 return response.json();
             })
             .then(data => {
-                // Layer per le nazioni non acquistate
                 L.geoJSON(data, {
                     style: function(feature) {
                         var name = feature.properties.name;
@@ -80,7 +152,7 @@
                         return {
                             color: "#ff7800",
                             weight: 1,
-                            fillOpacity: isPurchased ? 0 : 0.5, // Nascondi il riempimento se acquistata
+                            fillOpacity: isPurchased ? 0 : 0.5,
                             fillColor: "#ff7800"
                         };
                     },
@@ -114,37 +186,9 @@
 
                         layer.bindPopup(popupContent);
 
-                        // Se la nazione è acquistata e ha un logo, aggiungi un overlay SVG
+                        // Se la nazione è acquistata e ha un logo, aggiungi l'overlay SVG
                         if (isPurchased && purchasedNations[name].logo) {
-                            const bounds = layer.getBounds();
-                            const svgElement = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-                            svgElement.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
-                            svgElement.setAttribute('viewBox', '0 0 1000 1000');
-
-                            // Crea un pattern con il logo
-                            const pattern = document.createElementNS('http://www.w3.org/2000/svg', 'pattern');
-                            pattern.setAttribute('id', `pattern-${name}`);
-                            pattern.setAttribute('width', '100%');
-                            pattern.setAttribute('height', '100%');
-                            pattern.setAttribute('patternUnits', 'objectBoundingBox');
-
-                            const image = document.createElementNS('http://www.w3.org/2000/svg', 'image');
-                            image.setAttribute('href', purchasedNations[name].logo);
-                            image.setAttribute('width', '1000');
-                            image.setAttribute('height', '1000');
-                            pattern.appendChild(image);
-
-                            // Crea il percorso della nazione
-                            const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-                            path.setAttribute('d', geojsonToPath(feature.geometry));
-                            path.setAttribute('fill', `url(#pattern-${name})`);
-                            path.setAttribute('stroke', '#ff7800');
-                            path.setAttribute('stroke-width', '1');
-
-                            svgElement.appendChild(pattern);
-                            svgElement.appendChild(path);
-
-                            L.svgOverlay(svgElement, bounds).addTo(map);
+                            updateLogoOverlay(name, feature.geometry, purchasedNations[name].logo);
                         }
                     }
                 }).addTo(map);
@@ -158,7 +202,6 @@
                 savePurchasedNations();
                 alert('Nazione acquistata! Ora puoi caricare un logo.');
                 changeLogo(name);
-                location.reload();
             }
         }
 
@@ -172,10 +215,19 @@
                 if (file) {
                     var reader = new FileReader();
                     reader.onload = function(e) {
-                        purchasedNations[name].logo = e.target.result;
-                        savePurchasedNations();
-                        alert('Logo caricato con successo!');
-                        location.reload();
+                        compressImage(e.target.result, function(compressedSrc) {
+                            purchasedNations[name].logo = compressedSrc;
+                            savePurchasedNations();
+                            alert('Logo caricato con successo!');
+                            fetch('custom.geo.json')
+                                .then(response => response.json())
+                                .then(data => {
+                                    const feature = data.features.find(f => f.properties.name === name);
+                                    if (feature) {
+                                        updateLogoOverlay(name, feature.geometry, compressedSrc);
+                                    }
+                                });
+                        });
                     };
                     reader.readAsDataURL(file);
                 }
@@ -185,7 +237,16 @@
 
         // Aggiorna gli overlay SVG quando la mappa si muove
         map.on('moveend', function() {
-            location.reload(); // Ricarica per aggiornare le posizioni SVG
+            Object.keys(logoLayers).forEach(name => {
+                fetch('custom.geo.json')
+                    .then(response => response.json())
+                    .then(data => {
+                        const feature = data.features.find(f => f.properties.name === name);
+                        if (feature && purchasedNations[name].logo) {
+                            updateLogoOverlay(name, feature.geometry, purchasedNations[name].logo);
+                        }
+                    });
+            });
         });
     </script>
 </body>
