@@ -37,12 +37,42 @@
             localStorage.setItem('purchasedNations', JSON.stringify(purchasedNations));
         }
 
+        // Funzione per convertire GeoJSON in SVG path
+        function geojsonToPath(geojson) {
+            let pathData = '';
+            const coordinates = geojson.coordinates;
+
+            if (geojson.type === 'Polygon') {
+                coordinates.forEach(polygon => {
+                    polygon.forEach((point, index) => {
+                        const latlng = L.latLng(point[1], point[0]);
+                        const pixelPoint = map.latLngToLayerPoint(latlng);
+                        pathData += (index === 0 ? 'M' : 'L') + `${pixelPoint.x},${pixelPoint.y}`;
+                    });
+                    pathData += 'Z';
+                });
+            } else if (geojson.type === 'MultiPolygon') {
+                coordinates.forEach(multi => {
+                    multi.forEach(polygon => {
+                        polygon.forEach((point, index) => {
+                            const latlng = L.latLng(point[1], point[0]);
+                            const pixelPoint = map.latLngToLayerPoint(latlng);
+                            pathData += (index === 0 ? 'M' : 'L') + `${pixelPoint.x},${pixelPoint.y}`;
+                        });
+                        pathData += 'Z';
+                    });
+                });
+            }
+            return pathData;
+        }
+
         fetch('custom.geo.json')
             .then(response => {
                 if (!response.ok) throw new Error('Errore nel caricamento del JSON');
                 return response.json();
             })
             .then(data => {
+                // Layer per le nazioni non acquistate
                 L.geoJSON(data, {
                     style: function(feature) {
                         var name = feature.properties.name;
@@ -50,8 +80,8 @@
                         return {
                             color: "#ff7800",
                             weight: 1,
-                            fillOpacity: isPurchased ? 0.8 : 0.5,
-                            fillColor: isPurchased ? "#00ff00" : "#ff7800"
+                            fillOpacity: isPurchased ? 0 : 0.5, // Nascondi il riempimento se acquistata
+                            fillColor: "#ff7800"
                         };
                     },
                     onEachFeature: function(feature, layer) {
@@ -83,6 +113,39 @@
                         }
 
                         layer.bindPopup(popupContent);
+
+                        // Se la nazione è acquistata e ha un logo, aggiungi un overlay SVG
+                        if (isPurchased && purchasedNations[name].logo) {
+                            const bounds = layer.getBounds();
+                            const svgElement = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+                            svgElement.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+                            svgElement.setAttribute('viewBox', '0 0 1000 1000');
+
+                            // Crea un pattern con il logo
+                            const pattern = document.createElementNS('http://www.w3.org/2000/svg', 'pattern');
+                            pattern.setAttribute('id', `pattern-${name}`);
+                            pattern.setAttribute('width', '100%');
+                            pattern.setAttribute('height', '100%');
+                            pattern.setAttribute('patternUnits', 'objectBoundingBox');
+
+                            const image = document.createElementNS('http://www.w3.org/2000/svg', 'image');
+                            image.setAttribute('href', purchasedNations[name].logo);
+                            image.setAttribute('width', '1000');
+                            image.setAttribute('height', '1000');
+                            pattern.appendChild(image);
+
+                            // Crea il percorso della nazione
+                            const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+                            path.setAttribute('d', geojsonToPath(feature.geometry));
+                            path.setAttribute('fill', `url(#pattern-${name})`);
+                            path.setAttribute('stroke', '#ff7800');
+                            path.setAttribute('stroke-width', '1');
+
+                            svgElement.appendChild(pattern);
+                            svgElement.appendChild(path);
+
+                            L.svgOverlay(svgElement, bounds).addTo(map);
+                        }
                     }
                 }).addTo(map);
             })
@@ -119,6 +182,11 @@
             };
             input.click();
         }
+
+        // Aggiorna gli overlay SVG quando la mappa si muove
+        map.on('moveend', function() {
+            location.reload(); // Ricarica per aggiornare le posizioni SVG
+        });
     </script>
 </body>
 </html>
