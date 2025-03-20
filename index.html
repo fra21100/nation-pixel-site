@@ -25,7 +25,7 @@
             return Math.ceil(area / 100); // 1 pixel = 100 km²
         }
 
-        fetch('ne_110m_admin_0_countries.json') // Nome corretto del file
+        fetch('custom.geo.json') // Nome corretto del file
             .then(response => {
                 if (!response.ok) throw new Error('Errore nel caricamento del JSON');
                 return response.json();
