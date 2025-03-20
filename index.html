@@ -25,9 +25,9 @@
             return Math.ceil(area / 100); // 1 pixel = 100 km²
         }
 
-        fetch('nations.geojson')
+        fetch('ne_110m_admin_0_countries.json') // Nome corretto del file
             .then(response => {
-                if (!response.ok) throw new Error('Errore nel caricamento del GeoJSON');
+                if (!response.ok) throw new Error('Errore nel caricamento del JSON');
                 return response.json();
             })
             .then(data => {
@@ -36,7 +36,7 @@
                         return { color: "#ff7800", weight: 1, fillOpacity: 0.5 };
                     },
                     onEachFeature: function(feature, layer) {
-                        var name = feature.properties.name || "Nazione sconosciuta";
+                        var name = feature.properties.NAME || feature.properties.name || "Nazione sconosciuta"; // Prova entrambe le varianti
                         var area = feature.properties.area || 1000; // Default se area non presente
                         var pixels = calculatePixels(area);
                         layer.bindPopup(
