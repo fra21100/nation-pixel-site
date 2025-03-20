@@ -29,7 +29,7 @@
             return Math.ceil(area / 100); // 1 pixel = 100 km²
         }
 
-        // Oggetto per tenere traccia delle nazioni acquistate (salvato in localStorage)
+        // Oggetto per tenere traccia delle nazioni acquistate
         let purchasedNations = JSON.parse(localStorage.getItem('purchasedNations')) || {};
 
         // Funzione per salvare lo stato delle nazioni
@@ -46,11 +46,13 @@
                 L.geoJSON(data, {
                     style: function(feature) {
                         var name = feature.properties.name;
+                        var isPurchased = purchasedNations[name] || false;
+                        console.log(`Nazione: ${name}, Acquistata: ${isPurchased}`); // Debug
                         return {
                             color: "#ff7800",
                             weight: 1,
-                            fillOpacity: purchasedNations[name] ? 0.8 : 0.5, // Più opaco se acquistata
-                            fillColor: purchasedNations[name] ? "#00ff00" : "#ff7800" // Verde se acquistata
+                            fillOpacity: isPurchased ? 0.8 : 0.5,
+                            fillColor: isPurchased ? "#00ff00" : "#ff7800"
                         };
                     },
                     onEachFeature: function(feature, layer) {
@@ -75,6 +77,10 @@
                                 <br><img src="${isPurchased.logo}" class="logo-preview" alt="Logo">
                                 <br><button onclick="changeLogo('${name}')">Cambia Logo</button>
                             `;
+                        } else {
+                            popupContent += `
+                                <br><button onclick="changeLogo('${name}')">Carica Logo</button>
+                            `;
                         }
 
                         layer.bindPopup(popupContent);
@@ -90,7 +96,7 @@
                 savePurchasedNations();
                 alert('Nazione acquistata! Ora puoi caricare un logo.');
                 changeLogo(name);
-                location.reload(); // Ricarica la pagina per aggiornare la mappa
+                location.reload();
             }
         }
 
@@ -104,7 +110,7 @@
                 if (file) {
                     var reader = new FileReader();
                     reader.onload = function(e) {
-                        purchasedNations[name].logo = e.target.result; // Salva l'immagine come base64
+                        purchasedNations[name].logo = e.target.result;
                         savePurchasedNations();
                         alert('Logo caricato con successo!');
                         location.reload();
