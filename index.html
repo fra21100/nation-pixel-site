@@ -31,7 +31,8 @@
 
         // Oggetto per tenere traccia delle nazioni acquistate
         let purchasedNations = JSON.parse(localStorage.getItem('purchasedNations')) || {};
-        let logoLayers = {}; // Per tenere traccia degli overlay SVG
+        let logoLayers = {}; // Per tenere traccia degli overlay dei loghi
+        const MAX_PURCHASES = 5; // Limite temporaneo di nazioni acquistabili
 
         // Funzione per salvare lo stato delle nazioni
         function savePurchasedNations() {
@@ -39,7 +40,7 @@
                 localStorage.setItem('purchasedNations', JSON.stringify(purchasedNations));
             } catch (e) {
                 if (e.name === 'QuotaExceededError') {
-                    alert('Spazio in localStorage esaurito! Prova a rimuovere alcune nazioni o a usare immagini più piccole.');
+                    alert('Spazio in localStorage esaurito! Prova a rimuovere alcune nazioni.');
                 }
             }
         }
@@ -51,7 +52,7 @@
             img.onload = function() {
                 const canvas = document.createElement('canvas');
                 const ctx = canvas.getContext('2d');
-                const maxSize = 300; // Ridimensiona a 300x300 max
+                const maxSize = 200; // Ridimensiona a 200x200 max
                 let width = img.width;
                 let height = img.height;
 
@@ -70,12 +71,12 @@
                 canvas.width = width;
                 canvas.height = height;
                 ctx.drawImage(img, 0, 0, width, height);
-                callback(canvas.toDataURL('image/jpeg', 0.7)); // Qualità 70%
+                callback(canvas.toDataURL('image/jpeg', 0.6)); // Qualità 60%
             };
         }
 
-        // Funzione per convertire GeoJSON in SVG path
-        function geojsonToPath(geojson) {
+        // Funzione per convertire GeoJSON in SVG path per clip-path
+        function geojsonToClipPath(geojson) {
             let pathData = '';
             const coordinates = geojson.coordinates;
 
@@ -103,38 +104,35 @@
             return pathData;
         }
 
-        // Funzione per creare o aggiornare l'overlay SVG
+        // Funzione per creare o aggiornare l'overlay del logo
         function updateLogoOverlay(name, geometry, logoSrc) {
             if (logoLayers[name]) {
                 map.removeLayer(logoLayers[name]);
             }
 
             const bounds = L.geoJSON(geometry).getBounds();
+            const pathData = geojsonToClipPath(geometry);
+
             const svgElement = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
             svgElement.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
             svgElement.setAttribute('viewBox', '0 0 1000 1000');
 
-            const pattern = document.createElementNS('http://www.w3.org/2000/svg', 'pattern');
-            pattern.setAttribute('id', `pattern-${name}`);
-            pattern.setAttribute('width', '100%');
-            pattern.setAttribute('height', '100%');
-            pattern.setAttribute('patternUnits', 'objectBoundingBox');
-            pattern.setAttribute('patternTransform', 'scale(0.5) translate(0.25, 0.25)'); // Centra e ridimensiona
+            const defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
+            const clipPath = document.createElementNS('http://www.w3.org/2000/svg', 'clipPath');
+            clipPath.setAttribute('id', `clip-${name}`);
+            const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+            path.setAttribute('d', pathData);
+            clipPath.appendChild(path);
+            defs.appendChild(clipPath);
+            svgElement.appendChild(defs);
 
             const image = document.createElementNS('http://www.w3.org/2000/svg', 'image');
             image.setAttribute('href', logoSrc);
             image.setAttribute('width', '1000');
             image.setAttribute('height', '1000');
-            pattern.appendChild(image);
-
-            const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-            path.setAttribute('d', geojsonToPath(geometry));
-            path.setAttribute('fill', `url(#pattern-${name})`);
-            path.setAttribute('stroke', '#ff7800');
-            path.setAttribute('stroke-width', '1');
-
-            svgElement.appendChild(pattern);
-            svgElement.appendChild(path);
+            image.setAttribute('preserveAspectRatio', 'xMidYMid slice');
+            image.setAttribute('clip-path', `url(#clip-${name})`);
+            svgElement.appendChild(image);
 
             logoLayers[name] = L.svgOverlay(svgElement, bounds).addTo(map);
         }
@@ -170,13 +168,21 @@
                             Stato: ${isPurchased ? 'Acquistata' : 'Disponibile'}
                         `;
                         if (!isPurchased) {
-                            popupContent += `
-                                <br><button onclick="buyNation('${name}', ${pixels})">Compra</button>
-                            `;
+                            const purchasedCount = Object.keys(purchasedNations).length;
+                            if (purchasedCount >= MAX_PURCHASES) {
+                                popupContent += `
+                                    <br><p style="color: red;">Hai raggiunto il limite di ${MAX_PURCHASES} nazioni acquistabili. Rimuovi alcune nazioni per acquistarne altre.</p>
+                                `;
+                            } else {
+                                popupContent += `
+                                    <br><button onclick="buyNation('${name}', ${pixels})">Compra</button>
+                                `;
+                            }
                         } else if (purchasedNations[name].logo) {
                             popupContent += `
                                 <br><img src="${purchasedNations[name].logo}" class="logo-preview" alt="Logo">
                                 <br><button onclick="changeLogo('${name}')">Cambia Logo</button>
+                                <br><button onclick="removeLogo('${name}')">Rimuovi Logo</button>
                             `;
                         } else {
                             popupContent += `
@@ -186,7 +192,7 @@
 
                         layer.bindPopup(popupContent);
 
-                        // Se la nazione è acquistata e ha un logo, aggiungi l'overlay SVG
+                        // Se la nazione è acquistata e ha un logo, aggiungi l'overlay
                         if (isPurchased && purchasedNations[name].logo) {
                             updateLogoOverlay(name, feature.geometry, purchasedNations[name].logo);
                         }
@@ -235,7 +241,21 @@
             input.click();
         }
 
-        // Aggiorna gli overlay SVG quando la mappa si muove
+        // Funzione per rimuovere il logo
+        function removeLogo(name) {
+            if (confirm(`Vuoi rimuovere il logo e liberare la nazione ${name}?`)) {
+                if (logoLayers[name]) {
+                    map.removeLayer(logoLayers[name]);
+                    delete logoLayers[name];
+                }
+                delete purchasedNations[name];
+                savePurchasedNations();
+                alert('Logo rimosso e nazione liberata!');
+                location.reload();
+            }
+        }
+
+        // Aggiorna gli overlay quando la mappa si muove
         map.on('moveend', function() {
             Object.keys(logoLayers).forEach(name => {
                 fetch('custom.geo.json')
