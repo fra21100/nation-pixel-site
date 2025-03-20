@@ -16,35 +16,36 @@
 
     <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
     <script>
-        // Inizializza la mappa
         var map = L.map('map').setView([0, 0], 2);
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
             attribution: 'Map data © OpenStreetMap contributors'
         }).addTo(map);
 
-        // Funzione per calcolare i pixel (simulazione per ora)
         function calculatePixels(area) {
             return Math.ceil(area / 100); // 1 pixel = 100 km²
         }
 
-        // Carica il file GeoJSON (sostituisci con il tuo file)
-        fetch('ne_110m_admin_0_countries.geojson')
-            .then(response => response.json())
+        fetch('nations.geojson')
+            .then(response => {
+                if (!response.ok) throw new Error('Errore nel caricamento del GeoJSON');
+                return response.json();
+            })
             .then(data => {
                 L.geoJSON(data, {
                     style: function(feature) {
                         return { color: "#ff7800", weight: 1, fillOpacity: 0.5 };
                     },
                     onEachFeature: function(feature, layer) {
-                        var name = feature.properties.NAME || "Nazione sconosciuta";
-                        var area = feature.properties.AREA || 1000; // Area di default se non presente
-                        var pixels = calculatePixels(area * 1000); // Converti in km² approssimativi
+                        var name = feature.properties.name || "Nazione sconosciuta";
+                        var area = feature.properties.area || 1000; // Default se area non presente
+                        var pixels = calculatePixels(area);
                         layer.bindPopup(
                             `<b>${name}</b><br>Pixel: ${pixels}<br>Costo: $${pixels}<br>Stato: Disponibile`
                         );
                     }
                 }).addTo(map);
-            });
+            })
+            .catch(error => console.error('Errore:', error));
     </script>
 </body>
 </html>
