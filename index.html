@@ -46,8 +46,7 @@
                 L.geoJSON(data, {
                     style: function(feature) {
                         var name = feature.properties.name;
-                        var isPurchased = purchasedNations[name] || false;
-                        console.log(`Nazione: ${name}, Acquistata: ${isPurchased}`); // Debug
+                        var isPurchased = purchasedNations[name] && purchasedNations[name].purchased;
                         return {
                             color: "#ff7800",
                             weight: 1,
@@ -59,7 +58,7 @@
                         var name = feature.properties.name || "Nazione sconosciuta";
                         var area = nationData[name] || 1000;
                         var pixels = calculatePixels(area);
-                        var isPurchased = purchasedNations[name] || false;
+                        var isPurchased = purchasedNations[name] && purchasedNations[name].purchased;
 
                         // Contenuto del popup
                         var popupContent = `
@@ -72,9 +71,9 @@
                             popupContent += `
                                 <br><button onclick="buyNation('${name}', ${pixels})">Compra</button>
                             `;
-                        } else if (isPurchased.logo) {
+                        } else if (purchasedNations[name].logo) {
                             popupContent += `
-                                <br><img src="${isPurchased.logo}" class="logo-preview" alt="Logo">
+                                <br><img src="${purchasedNations[name].logo}" class="logo-preview" alt="Logo">
                                 <br><button onclick="changeLogo('${name}')">Cambia Logo</button>
                             `;
                         } else {
