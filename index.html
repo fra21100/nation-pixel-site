@@ -280,98 +280,106 @@
             return amount;
         }
 
-        // Gestione della selezione
-        let startX, startY, endX, endY, isSelecting = false;
-        grid.addEventListener('mousedown', (e) => {
-            const rect = grid.getBoundingClientRect();
-            startX = Math.floor((e.clientX - rect.left) / BLOCK_SIZE) * BLOCK_SIZE;
-            startY = Math.floor((e.clientY - rect.top) / BLOCK_SIZE) * BLOCK_SIZE;
-            isSelecting = true;
-            selection.style.left = `${startX}px`;
-            selection.style.top = `${startY}px`;
-            selection.style.width = '0px';
-            selection.style.height = '0px';
-            selection.style.display = 'block';
-            console.log('Inizio selezione:', { startX, startY });
-        });
+// Gestione della selezione
+let startX, startY, endX, endY, isSelecting = false;
+grid.addEventListener('mousedown', (e) => {
+    const rect = grid.getBoundingClientRect();
+    startX = Math.floor((e.clientX - rect.left) / BLOCK_SIZE) * BLOCK_SIZE;
+    startY = Math.floor((e.clientY - rect.top) / BLOCK_SIZE) * BLOCK_SIZE;
+    isSelecting = true;
+    selection.style.left = `${startX}px`;
+    selection.style.top = `${startY}px`;
+    selection.style.width = '0px';
+    selection.style.height = '0px';
+    selection.style.display = 'block';
+    console.log('Inizio selezione:', { startX, startY, clientX: e.clientX, clientY: e.clientY, rectLeft: rect.left, rectTop: rect.top, display: selection.style.display });
+});
 
-        grid.addEventListener('mousemove', (e) => {
-            if (!isSelecting) return;
-            const rect = grid.getBoundingClientRect();
-            endX = Math.floor((e.clientX - rect.left) / BLOCK_SIZE) * BLOCK_SIZE;
-            endY = Math.floor((e.clientY - rect.top) / BLOCK_SIZE) * BLOCK_SIZE;
+grid.addEventListener('mousemove', (e) => {
+    if (!isSelecting) return;
+    const rect = grid.getBoundingClientRect();
+    endX = Math.floor((e.clientX - rect.left) / BLOCK_SIZE) * BLOCK_SIZE;
+    endY = Math.floor((e.clientY - rect.top) / BLOCK_SIZE) * BLOCK_SIZE;
 
-            const width = Math.abs(endX - startX);
-            const height = Math.abs(endY - startY);
-            const minX = Math.min(startX, endX);
-            const minY = Math.min(startY, endY);
+    const width = Math.abs(endX - startX);
+    const height = Math.abs(endY - startY);
+    const minX = Math.min(startX, endX);
+    const minY = Math.min(startY, endY);
 
-            selection.style.left = `${minX}px`;
-            selection.style.top = `${minY}px`;
-            selection.style.width = `${width}px`;
-            selection.style.height = `${height}px`;
-            console.log('Aggiornamento selezione:', { minX, minY, width, height });
-        });
+    selection.style.left = `${minX}px`;
+    selection.style.top = `${minY}px`;
+    selection.style.width = `${width}px`;
+    selection.style.height = `${height}px`;
+    console.log('Aggiornamento selezione:', { minX, minY, width, height, clientX: e.clientX, clientY: e.clientY, rectLeft: rect.left, rectTop: rect.top, display: selection.style.display });
+});
 
-        grid.addEventListener('mouseup', () => {
-            if (!isSelecting) return;
-            isSelecting = false;
+grid.addEventListener('mouseup', () => {
+    if (!isSelecting) return;
+    isSelecting = false;
 
-            const width = Math.abs(endX - startX);
-            const height = Math.abs(endY - startY);
-            const minX = Math.min(startX, endX);
-            const minY = Math.min(startY, endY);
+    const width = Math.abs(endX - startX);
+    const height = Math.abs(endY - startY);
+    const minX = Math.min(startX, endX);
+    const minY = Math.min(startY, endY);
 
-            // Controlla se l’area è valida
-            if (width < BLOCK_SIZE || height < BLOCK_SIZE) {
-                alert('Seleziona un’area di almeno 10x10 pixel!');
-                selection.style.display = 'none';
-                return;
-            }
+    // Controlla se l’area è valida
+    if (width < BLOCK_SIZE || height < BLOCK_SIZE) {
+        alert('Seleziona un’area di almeno 10x10 pixel!');
+        selection.style.display = 'none';
+        console.log('Selezione non valida: area troppo piccola', { width, height });
+        return;
+    }
 
-            // Controlla se l’area è occupata
-            if (isAreaOccupied(minX, minY, width, height)) {
-                alert('Quest’area è già occupata! Scegli un’altra posizione.');
-                selection.style.display = 'none';
-                return;
-            }
+    // Controlla se l’area è occupata
+    if (isAreaOccupied(minX, minY, width, height)) {
+        alert('Quest’area è già occupata! Scegli un’altra posizione.');
+        selection.style.display = 'none';
+        console.log('Selezione non valida: area occupata', { minX, minY, width, height });
+        return;
+    }
 
-            // Salva le coordinate e dimensioni selezionate
-            selectedX = minX;
-            selectedY = minY;
-            selectedWidth = width;
-            selectedHeight = height;
+    // Salva le coordinate e dimensioni selezionate
+    selectedX = minX;
+    selectedY = minY;
+    selectedWidth = width;
+    selectedHeight = height;
 
-            // Calcola il costo
-            const pixels = (width / BLOCK_SIZE) * (height / BLOCK_SIZE) * 100;
-            const cost = pixels * PRICE_PER_PIXEL;
+    // Calcola il costo
+    const pixels = (width / BLOCK_SIZE) * (height / BLOCK_SIZE) * 100;
+    const cost = pixels * PRICE_PER_PIXEL;
 
-            // Mostra il form di acquisto
-            positionSpan.textContent = `(${minX}, ${minY}) - ${width}x${height} pixel`;
-            costSpan.textContent = cost.toFixed(2);
-            buyForm.style.display = 'block';
-            buyForm.dataset.x = minX;
-            buyForm.dataset.y = minY;
-            buyForm.dataset.width = width;
-            buyForm.dataset.height = height;
-            buyForm.dataset.cost = cost; // Salva il costo per il pagamento
-            console.log('Form di acquisto mostrato:', { x: minX, y: minY, width, height, cost });
-        });
+    // Mostra il form di acquisto
+    positionSpan.textContent = `(${minX}, ${minY}) - ${width}x${height} pixel`;
+    costSpan.textContent = cost.toFixed(2);
+    buyForm.style.display = 'block';
+    buyForm.dataset.x = minX;
+    buyForm.dataset.y = minY;
+    buyForm.dataset.width = width;
+    buyForm.dataset.height = height;
+    buyForm.dataset.cost = cost;
+    console.log('Form di acquisto mostrato:', { x: minX, y: minY, width, height, cost });
+});
 
-        // Mostra l’anteprima dell’immagine
-        imageInput.addEventListener('change', () => {
-            const file = imageInput.files[0];
-            if (file) {
-                const reader = new FileReader();
-                reader.onload = function(e) {
-                    previewImg.src = e.target.result;
-                    previewImg.style.display = 'block';
-                };
-                reader.readAsDataURL(file);
-            } else {
-                previewImg.style.display = 'none';
-            }
-        });
+// Mostra l’anteprima dell’immagine
+imageInput.addEventListener('change', () => {
+    const file = imageInput.files[0];
+    if (file) {
+        console.log("Immagine selezionata:", file.name, file);
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            previewImg.src = e.target.result;
+            previewImg.style.display = 'block';
+            console.log("Anteprima immagine mostrata:", e.target.result);
+        };
+        reader.onerror = function(e) {
+            console.error("Errore durante la lettura del file:", e);
+        };
+        reader.readAsDataURL(file);
+    } else {
+        previewImg.style.display = 'none';
+        console.log("Nessuna immagine selezionata");
+    }
+});
 
         // Conferma dell’acquisto con Stripe
         async function confirmPurchase() {
